@@ -48,10 +48,21 @@ class StorageWrapper:
         for key in keys:
             yield self._from_hash(self.client.hgetall(key))
 
+    def filter_by_ids(self, product_ids):
+        for product_id in product_ids:
+            try:
+                product = self.get(product_id)
+                yield product
+            except NotFound:
+                continue
+
     def create(self, product):
         self.client.hmset(
             self._format_key(product['id']),
             product)
+
+    def delete(self, product_id):
+        self.client.delete(self._format_key(product_id))
 
     def decrement_stock(self, product_id, amount):
         return self.client.hincrby(

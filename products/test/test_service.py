@@ -24,7 +24,7 @@ def test_get_product(create_product, service_container):
 
     assert stored_product == loaded_product
 
-
+    
 def test_get_product_fails_on_not_found(service_container):
 
     with pytest.raises(NotFound):
@@ -150,3 +150,21 @@ def test_handle_order_created(
     assert b'6' == product_one[b'in_stock']
     assert b'9' == product_two[b'in_stock']
     assert b'12' == product_three[b'in_stock']
+
+def test_delete_existing_product(product, redis_client, service_container):
+
+    product_id = product['id']
+    with entrypoint_hook(service_container, 'delete') as delete:
+        delete(product_id)
+
+    with pytest.raises(NotFound):
+        with entrypoint_hook(service_container, "get") as get:
+            get(product_id)
+
+
+def test_delete_nonexistent_product(product, redis_client, service_container):
+    product_id = "NONEXISTENT"
+    with entrypoint_hook(service_container, "delete") as delete:
+        result = delete(product_id)
+
+    assert result is None

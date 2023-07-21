@@ -74,6 +74,16 @@ class GatewayService(object):
             json.dumps({'id': product_data['id']}), mimetype='application/json'
         )
 
+    @http("DELETE", "/products/<string:product_id>", expected_exceptions=ProductNotFound)
+    def delete_product(self, request, product_id):
+        """Deletes a product by `product_id`
+        """
+        product = self.products_rpc.delete(product_id)
+        return Response(
+            json.dumps({'message': 'Product deleted successfully'}),
+            mimetype='application/json'
+        )
+
     @http("GET", "/orders/<int:order_id>", expected_exceptions=OrderNotFound)
     def get_order(self, request, order_id):
         """Gets the order details for the order given by `order_id`.
@@ -93,8 +103,12 @@ class GatewayService(object):
         # raise``OrderNotFound``
         order = self.orders_rpc.get_order(order_id)
 
+        # Retrieve products by their IDs
+        product_id_list = [item['product_id'] for item in order['order_details']]
+        products_list = self.products_rpc.product_id_list(product_id_list)
+
         # Retrieve all products from the products service
-        product_map = {prod['id']: prod for prod in self.products_rpc.list()}
+        product_map = {prod['id']: prod for prod in products_list}
 
         # get the configured image root
         image_root = config['PRODUCT_IMAGE_ROOT']
@@ -156,8 +170,14 @@ class GatewayService(object):
         return Response(json.dumps({'id': id_}), mimetype='application/json')
 
     def _create_order(self, order_data):
+        # Retrieve products by their IDs from the products service
+        product_ids = [item['product_id'] for item in order_data['order_details']]
+        products = self.products_rpc.product_id_list(product_ids)
+
         # check order product ids are valid
-        valid_product_ids = {prod['id'] for prod in self.products_rpc.list()}
+        valid_product_ids = {item['id'] for item in products}
+                
+        print("valid_product_ids", valid_product_ids)
         for item in order_data['order_details']:
             if item['product_id'] not in valid_product_ids:
                 raise ProductNotFound(
@@ -172,3 +192,24 @@ class GatewayService(object):
             serialized_data['order_details']
         )
         return result['id']
+
+    @http("GET", "/orders")
+    def list_orders(self, request):
+        """Lists all orders
+        
+        Example:
+        
+        /orders?page=1&page_size=10
+    
+        """
+        try:
+            page = request.args.get("page", default=1, type=int)
+            page_size = request.args.get("page_size", default=20, type=int)
+
+            orders = self.orders_rpc.list_orders(page=page, page_size=page_size)
+
+            list_orders = GetOrderSchema(many=True).dumps(orders).data
+
+            return Response(list_orders, mimetype="application/json")
+        except Exception as e:
+            raise e
